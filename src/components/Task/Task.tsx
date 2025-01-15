@@ -4,7 +4,9 @@ import "./Task.css";
 
 import { useDispatch, useSelector } from "react-redux";
 import { setCurrentPage } from "../../redux/pageSlice";
-import { useGetTasksQuery } from "../../redux/tasksApi.js";
+import { useAddTaskMutation, useGetTasksQuery } from "../../redux/tasksApi.js";
+
+import { useForm } from "react-hook-form";
 
 interface TaskProps {
   id: number;
@@ -15,6 +17,11 @@ interface TaskProps {
 }
 
 const Task: React.FC = () => {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({});
   const dispatch = useDispatch();
   const currentPage = useSelector((state: any) => state.page.currentPage);
 
@@ -27,6 +34,38 @@ const Task: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [sortBy, setSortBy] = useState<"name" | "status" | "priority" | "id">("name");
 
+  const [newTask, setNewTask] = useState("");
+
+  const { data = [], isLoading } = useGetTasksQuery({ currentPage });
+  const [addTask] = useAddTaskMutation();
+  const [deleteTask, { isError }] = useAddTaskMutation();
+
+  const handleAddTask = async (data) => {
+    try {
+      if (data) {
+        await addTask({
+          name: data.name,
+          desc: data.desc,
+          priority: data.priority,
+          isCompleted: false,
+        }).unwrap();
+        setNewTask("");
+      }
+    } catch (error) {
+      console.error("Error adding task:", error);
+      alert(error?.data?.message || "An error occurred while adding the task.");
+    }
+  };
+
+  const handleDeleteTask = async (id) => {
+    try {
+      await deleteTask(id).unwrap();
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      alert(error?.data?.message || "An error occurred while deleting the task.");
+    }
+  };
+
   useEffect(() => {
     const savedStatusFilter = localStorage.getItem("statusFilter");
     const savedPriorityFilter = localStorage.getItem("priorityFilter");
@@ -37,14 +76,12 @@ const Task: React.FC = () => {
     if (savedSortOrder) setSortOrder(savedSortOrder as "asc" | "desc");
   }, []);
 
-  // Update localStorage whenever filter or sort state changes
+  
   useEffect(() => {
     localStorage.setItem("statusFilter", statusFilter);
     localStorage.setItem("priorityFilter", priorityFilter);
     localStorage.setItem("sortOrder", sortOrder);
   }, [statusFilter, priorityFilter, sortOrder]);
-
-  const { data = [], isLoading } = useGetTasksQuery({ currentPage });
 
   useEffect(() => {
     setLoading(isLoading);
@@ -53,7 +90,7 @@ const Task: React.FC = () => {
   useEffect(() => {
     const filtered = data.filter((task: any) => {
       const matchesStatus =
-        statusFilter === "Все" || // No filter applied for status
+        statusFilter === "Все" || 
         (statusFilter === "Выполненные" && task.isCompleted) ||
         (statusFilter === "Невыполненные" && !task.isCompleted);
 
@@ -66,24 +103,24 @@ const Task: React.FC = () => {
       let compareA: any = a[sortBy];
       let compareB: any = b[sortBy];
 
-      // Handle boolean values for status (isCompleted)
+      
       if (sortBy === "status") {
         compareA = a.isCompleted ? 1 : 0;
         compareB = b.isCompleted ? 1 : 0;
       }
 
-      // Handle string values (name, priority)
+    
       if (typeof compareA === "string" && typeof compareB === "string") {
         compareA = compareA.toLowerCase();
         compareB = compareB.toLowerCase();
       }
 
-      // Handle number values (id)
+    
       if (typeof compareA === "number" && typeof compareB === "number") {
-        // No need to modify the values, just compare directly
+      
       }
 
-      // Compare the values based on sortOrder
+     
       if (compareA < compareB) {
         return sortOrder === "asc" ? -1 : 1;
       } else if (compareA > compareB) {
@@ -119,6 +156,35 @@ const Task: React.FC = () => {
     <div className="task-list-container">
       {error && <div className="error">{error}</div>}
 
+      <form className="task-form" onSubmit={handleSubmit(handleAddTask)}>
+        <input
+          className="task-input"
+          {...register("name", { required: true })}
+          placeholder="Название"
+          type="text"
+        />
+        <input
+          className="task-input"
+          {...register("desc", { required: true })}
+          placeholder="Описание"
+          type="text"
+        />
+        <select
+          className="task-select"
+          {...register("priority", { required: "Task priority is required" })}
+          defaultValue="Без приоритета"
+        >
+          <option value="" disabled>
+            Select Priority
+          </option>
+          <option value="Высокий">Высокий</option>
+          <option value="Средний">Средний</option>
+          <option value="Низкий">Низкий</option>
+          <option value="Без приоритета">Без приоритета</option>
+        </select>
+        <input className="task-submit" type="submit" />
+      </form>
+
       <div className="filters">
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="Все">Все</option>
@@ -151,12 +217,15 @@ const Task: React.FC = () => {
       </div>
 
       <ul className="task-list">
-        {filteredData.map(({ id, name, desc, priority, isCompleted, index }) => (
-          <li key={index} className="task">
+        {filteredData.map(({ id, name, desc, priority, isCompleted }) => (
+          <li key={id} className="task">
             <div className="task__name">{name}</div>
             <div className="task__desc">{desc}</div>
             <div className="task__priority">{priority}</div>
             <div className="task__status">{isCompleted ? "Выполнено" : "Невыполнено"}</div>
+            <button className="delete-button" onClick={() => handleDeleteTask(id)}>
+              Delete
+            </button>
           </li>
         ))}
       </ul>
